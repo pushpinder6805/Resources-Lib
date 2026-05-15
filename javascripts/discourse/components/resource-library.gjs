@@ -257,6 +257,8 @@ export default class ResourceLibrary extends Component {
         action: Composer.EDIT,
         topic: this.store.createRecord("topic", result),
         post: this.store.createRecord("post", post),
+        draftKey: `topic_${topic.id}`,
+        draftSequence: 0,
       });
     } catch (e) {
       console.error("Failed to open topic for editing", e);
