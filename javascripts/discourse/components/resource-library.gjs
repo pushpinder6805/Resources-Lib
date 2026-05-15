@@ -138,37 +138,31 @@ export default class ResourceLibrary extends Component {
     const entries = Object.entries(configMap);
     if (entries.length === 0) return;
 
-    const results = await Promise.all(
-      entries.map(([catId, cfg]) =>
-        ajax(`/t/${cfg.topicId}.json`)
-          .then((data) => ({ catId, data }))
-          .catch(() => null)
-      )
-    );
-
     const newConfigMap = { ...configMap };
-    results.forEach((r) => {
-      if (!r) return;
-      const post = r.data.post_stream?.posts?.[0];
-      if (post) {
-        const raw = post.raw || "";
+
+    for (const [catId, cfg] of entries) {
+      try {
+        const topicData = await ajax(`/t/${cfg.topicId}.json`);
+        const postId = topicData.post_stream?.posts?.[0]?.id;
+        if (!postId) continue;
+
+        const postData = await ajax(`/posts/${postId}.json`);
+        const raw = postData.raw || "";
         const match = raw.match(/```\n?([\s\S]*?)\n?```/);
         if (match) {
-          try {
-            const parsed = JSON.parse(match[1].trim());
-            if (Array.isArray(parsed)) {
-              newConfigMap[r.catId] = {
-                ...newConfigMap[r.catId],
-                postId: post.id,
-                orderedIds: parsed,
-              };
-            }
-          } catch (e) {
-            // parse error, ignore
+          const parsed = JSON.parse(match[1].trim());
+          if (Array.isArray(parsed)) {
+            newConfigMap[catId] = {
+              ...newConfigMap[catId],
+              postId,
+              orderedIds: parsed,
+            };
           }
         }
+      } catch (e) {
+        // topic not accessible or parse failed
       }
-    });
+    }
 
     this.orderConfigMap = newConfigMap;
   }
@@ -339,6 +333,13 @@ export default class ResourceLibrary extends Component {
   }
 
   @action
+  updateOrderConfig(categoryId, topicId, postId, orderedIds) {
+    const newMap = { ...this.orderConfigMap };
+    newMap[categoryId] = { topicId, postId, orderedIds };
+    this.orderConfigMap = newMap;
+  }
+
+  @action
   openNewCategory() {
     this.router.transitionTo("newCategory");
   }
@@ -413,6 +414,7 @@ export default class ResourceLibrary extends Component {
               @isStaff={{this.isStaffUser}}
               @onDeleteTopic={{this.deleteTopic}}
               @onEditTopic={{this.editTopic}}
+              @onOrderSaved={{this.updateOrderConfig}}
             />
           {{/each}}
         {{else}}

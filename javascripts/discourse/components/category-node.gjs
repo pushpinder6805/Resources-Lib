@@ -135,22 +135,29 @@ export default class CategoryNode extends Component {
       const orderData = JSON.stringify(this.localOrderedIds || []);
       const rawContent = `${CONFIG_TOPIC_PREFIX}\n\n\`\`\`\n${orderData}\n\`\`\``;
       const config = this.orderConfig;
+      const catId = this.args.category.id;
 
       if (config?.topicId && config?.postId) {
         await ajax(`/posts/${config.postId}`, {
           type: "PUT",
           data: { post: { raw: rawContent } },
         });
+        if (this.args.onOrderSaved) {
+          this.args.onOrderSaved(catId, config.topicId, config.postId, this.localOrderedIds);
+        }
       } else {
-        await ajax("/posts", {
+        const result = await ajax("/posts", {
           type: "POST",
           data: {
             title: `${CONFIG_TOPIC_PREFIX} ${this.args.category.name}`,
             raw: rawContent,
-            category: this.args.category.id,
+            category: catId,
             archetype: "regular",
           },
         });
+        if (result && this.args.onOrderSaved) {
+          this.args.onOrderSaved(catId, result.topic_id, result.id, this.localOrderedIds);
+        }
       }
 
       this.reorderMode = false;
@@ -195,6 +202,7 @@ export default class CategoryNode extends Component {
               @isStaff={{@isStaff}}
               @onDeleteTopic={{@onDeleteTopic}}
               @onEditTopic={{@onEditTopic}}
+              @onOrderSaved={{@onOrderSaved}}
             />
           {{/each}}
         </div>
