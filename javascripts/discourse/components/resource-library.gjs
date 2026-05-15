@@ -19,7 +19,7 @@ export default class ResourceLibrary extends Component {
   @tracked activeRootId = 10;
   @tracked categories = [];
   @tracked topicsMap = {};
-  @tracked orderConfigMap = {};
+  @tracked _orderOverride = null;
   @tracked searchQuery = "";
   @tracked loading = true;
 
@@ -66,7 +66,6 @@ export default class ResourceLibrary extends Component {
   async loadData() {
     this.loading = true;
     this.topicsMap = {};
-    this.orderConfigMap = {};
     this.categories = [];
 
     try {
@@ -100,10 +99,27 @@ export default class ResourceLibrary extends Component {
     }
   }
 
+  get orderConfigMap() {
+    if (this._orderOverride) return this._orderOverride;
+    try {
+      const raw = settings?.resource_topic_order || "{}";
+      const parsed = JSON.parse(raw);
+      const result = {};
+      Object.keys(parsed).forEach((catId) => {
+        const ids = parsed[catId];
+        if (Array.isArray(ids) && ids.length > 0) {
+          result[catId] = { orderedIds: ids };
+        }
+      });
+      return result;
+    } catch (e) {
+      return {};
+    }
+  }
+
   async loadAllTopics(tree) {
     const leafCategories = this.getLeafCategories(tree);
     const map = {};
-    const configMap = {};
 
     const batches = [];
     for (let i = 0; i < leafCategories.length; i += 5) {
@@ -119,26 +135,15 @@ export default class ResourceLibrary extends Component {
         )
       );
       results.forEach((r) => {
-        const configTopic = r.topics.find(
-          (t) => t.title && t.title.startsWith("[resource-order-config]")
-        );
-        if (configTopic) {
-          const orderStr = configTopic.title.replace("[resource-order-config]", "").trim();
-          const ids = orderStr.split(",").map(Number).filter((n) => n > 0);
-          configMap[r.id] = { topicId: configTopic.id, orderedIds: ids };
-        }
         map[r.id] = r.topics.filter((t) => !this.isAboutTopic(t));
       });
     }
 
     this.topicsMap = map;
-    this.orderConfigMap = configMap;
   }
 
   isAboutTopic(topic) {
-    if (!topic.title) return false;
-    return topic.title.toLowerCase().startsWith("about the") ||
-      topic.title.startsWith("[resource-order-config]");
+    return topic.title && topic.title.toLowerCase().startsWith("about the");
   }
 
   getLeafCategories(tree) {
@@ -301,10 +306,11 @@ export default class ResourceLibrary extends Component {
   }
 
   @action
-  updateOrderConfig(categoryId, topicId, postId, orderedIds) {
-    const newMap = { ...this.orderConfigMap };
-    newMap[categoryId] = { topicId, orderedIds };
-    this.orderConfigMap = newMap;
+  updateOrderConfig(categoryId, orderedIds) {
+    const current = this.orderConfigMap;
+    const newMap = { ...current };
+    newMap[categoryId] = { orderedIds };
+    this._orderOverride = newMap;
   }
 
   @action

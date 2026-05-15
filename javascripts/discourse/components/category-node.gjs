@@ -6,8 +6,6 @@ import { on } from "@ember/modifier";
 import { ajax } from "discourse/lib/ajax";
 import { eq } from "truth-helpers";
 
-const CONFIG_TOPIC_PREFIX = "[resource-order-config]";
-
 function positionLabel(index) {
   return `${index + 1}.`;
 }
@@ -20,8 +18,7 @@ export default class CategoryNode extends Component {
 
   get topics() {
     const map = this.args.topicsMap || {};
-    const all = map[this.args.category.id] || [];
-    return all.filter((t) => !t.title?.startsWith(CONFIG_TOPIC_PREFIX));
+    return map[this.args.category.id] || [];
   }
 
   get orderConfig() {
@@ -133,31 +130,26 @@ export default class CategoryNode extends Component {
     this.savingOrder = true;
     try {
       const ids = this.localOrderedIds || [];
-      const newTitle = `${CONFIG_TOPIC_PREFIX} ${ids.join(",")}`;
-      const config = this.orderConfig;
       const catId = this.args.category.id;
 
-      if (config?.topicId) {
-        await ajax(`/t/${config.topicId}`, {
-          type: "PUT",
-          data: { title: newTitle },
-        });
-        if (this.args.onOrderSaved) {
-          this.args.onOrderSaved(catId, config.topicId, null, ids);
-        }
-      } else {
-        const result = await ajax("/posts", {
-          type: "POST",
-          data: {
-            title: newTitle,
-            raw: "This topic stores the display order for this category. Do not delete.",
-            category: catId,
-            archetype: "regular",
-          },
-        });
-        if (result && this.args.onOrderSaved) {
-          this.args.onOrderSaved(catId, result.topic_id, null, ids);
-        }
+      const currentMap = this.args.orderConfigMap || {};
+      const dataMap = {};
+      Object.keys(currentMap).forEach((key) => {
+        dataMap[key] = currentMap[key].orderedIds || [];
+      });
+      dataMap[catId] = ids;
+
+      const themeId = settings.theme_id;
+      await ajax(`/admin/themes/${themeId}/setting`, {
+        type: "PUT",
+        data: {
+          name: "resource_topic_order",
+          value: JSON.stringify(dataMap),
+        },
+      });
+
+      if (this.args.onOrderSaved) {
+        this.args.onOrderSaved(catId, ids);
       }
 
       this.reorderMode = false;
