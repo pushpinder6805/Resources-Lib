@@ -19,6 +19,7 @@ export default class ResourceLibrary extends Component {
   @tracked activeRootId = 10;
   @tracked categories = [];
   @tracked topicsMap = {};
+  @tracked orderConfigMap = {};
   @tracked searchQuery = "";
   @tracked loading = true;
 
@@ -65,6 +66,7 @@ export default class ResourceLibrary extends Component {
   async loadData() {
     this.loading = true;
     this.topicsMap = {};
+    this.orderConfigMap = {};
     this.categories = [];
 
     try {
@@ -101,6 +103,7 @@ export default class ResourceLibrary extends Component {
   async loadAllTopics(tree) {
     const leafCategories = this.getLeafCategories(tree);
     const map = {};
+    const configMap = {};
 
     const batches = [];
     for (let i = 0; i < leafCategories.length; i += 5) {
@@ -116,15 +119,64 @@ export default class ResourceLibrary extends Component {
         )
       );
       results.forEach((r) => {
+        const configTopic = r.topics.find(
+          (t) => t.title && t.title.startsWith("[resource-order-config]")
+        );
+        if (configTopic) {
+          configMap[r.id] = { topicId: configTopic.id };
+        }
         map[r.id] = r.topics.filter((t) => !this.isAboutTopic(t));
       });
     }
 
     this.topicsMap = map;
+    this.orderConfigMap = configMap;
+    this._loadOrderConfigs(configMap);
+  }
+
+  async _loadOrderConfigs(configMap) {
+    const entries = Object.entries(configMap);
+    if (entries.length === 0) return;
+
+    const results = await Promise.all(
+      entries.map(([catId, cfg]) =>
+        ajax(`/t/${cfg.topicId}.json`)
+          .then((data) => ({ catId, data }))
+          .catch(() => null)
+      )
+    );
+
+    const newConfigMap = { ...configMap };
+    results.forEach((r) => {
+      if (!r) return;
+      const post = r.data.post_stream?.posts?.[0];
+      if (post) {
+        const raw = post.raw || "";
+        const match = raw.match(/```\n?([\s\S]*?)\n?```/);
+        if (match) {
+          try {
+            const parsed = JSON.parse(match[1].trim());
+            if (Array.isArray(parsed)) {
+              newConfigMap[r.catId] = {
+                ...newConfigMap[r.catId],
+                postId: post.id,
+                orderedIds: parsed,
+              };
+            }
+          } catch (e) {
+            // parse error, ignore
+          }
+        }
+      }
+    });
+
+    this.orderConfigMap = newConfigMap;
   }
 
   isAboutTopic(topic) {
-    return topic.title && topic.title.toLowerCase().startsWith("about the");
+    if (!topic.title) return false;
+    return topic.title.toLowerCase().startsWith("about the") ||
+      topic.title.startsWith("[resource-order-config]");
   }
 
   getLeafCategories(tree) {
@@ -355,6 +407,7 @@ export default class ResourceLibrary extends Component {
             <CategoryNode
               @category={{cat}}
               @topicsMap={{this.topicsMap}}
+              @orderConfigMap={{this.orderConfigMap}}
               @searchQuery={{this.searchQuery}}
               @maxTopics={{this.topicsPerCategory}}
               @isStaff={{this.isStaffUser}}
