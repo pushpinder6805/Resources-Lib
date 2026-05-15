@@ -253,6 +253,7 @@ body.category-california-resource-library {
   gap: 0.5rem;
 }
 
+.category-node__edit-btn,
 .category-node__delete-btn {
   display: inline-flex;
   align-items: center;
@@ -271,10 +272,33 @@ body.category-california-resource-library {
   .category-node__topic:hover & {
     opacity: 1;
   }
+}
+
+.category-node__edit-btn:hover {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.category-node__delete-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.category-node__see-more {
+  display: inline-block;
+  margin: 0.35rem 0 0.5rem 1.25rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--tertiary);
+  font-size: 0.825rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
 
   &:hover {
-    background: #fee2e2;
-    color: #dc2626;
+    color: var(--tertiary-hover, var(--tertiary));
+    text-decoration: underline;
   }
 }
 

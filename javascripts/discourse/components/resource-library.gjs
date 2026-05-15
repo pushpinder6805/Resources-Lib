@@ -13,6 +13,7 @@ export default class ResourceLibrary extends Component {
   @service composer;
   @service router;
   @service site;
+  @service store;
   @service currentUser;
 
   @tracked activeRootId = 10;
@@ -243,6 +244,27 @@ export default class ResourceLibrary extends Component {
   }
 
   @action
+  async editTopic(topic) {
+    try {
+      const result = await ajax(`/t/${topic.id}.json`);
+      const post = result.post_stream?.posts?.[0];
+      if (!post) {
+        alert("Could not load topic content.");
+        return;
+      }
+
+      this.composer.open({
+        action: Composer.EDIT,
+        topic: this.store.createRecord("topic", result),
+        post: this.store.createRecord("post", post),
+      });
+    } catch (e) {
+      console.error("Failed to open topic for editing", e);
+      alert("Failed to open topic for editing. Please try again.");
+    }
+  }
+
+  @action
   async deleteTopic(topic) {
     if (!confirm(`Are you sure you want to permanently delete "${topic.title}"?`)) {
       return;
@@ -335,6 +357,7 @@ export default class ResourceLibrary extends Component {
               @maxTopics={{this.topicsPerCategory}}
               @isStaff={{this.isStaffUser}}
               @onDeleteTopic={{this.deleteTopic}}
+              @onEditTopic={{this.editTopic}}
             />
           {{/each}}
         {{else}}
