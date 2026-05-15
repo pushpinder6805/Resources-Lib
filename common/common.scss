@@ -1,0 +1,583 @@
+// Hide default topic list when resource library is visible
+.resource-library + .topic-list,
+.resource-library + .category-list,
+.resource-library ~ .topic-list,
+.resource-library ~ .category-list,
+.resource-library ~ .latest-topic-list-container {
+  display: none !important;
+}
+#reply-control .category-input .category-chooser .select-kit-body {
+    max-width: 700px !important;
+}
+
+.custom-resource-page .post__row.row {
+  border: 0 !important;
+  background: none !important;
+}
+
+
+// When browsing resource categories, hide the default topic list
+body.category-resource-library,
+body.category-california-resource-library {
+  .topic-list,
+  .latest-topic-list-container,
+  #list-area .topic-list {
+    display: none !important;
+  }
+
+  .custom-category-header {
+    display: none !important;
+  }
+}
+
+.resource-library {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+}
+
+.resource-library__header {
+  margin-bottom: 1.5rem;
+}
+
+.resource-library__title {
+  font-size: 1.95rem;
+  font-weight: 700;
+  color: rgb(27, 58, 92);
+  margin: 0 0 0.5rem;
+  line-height: 1.2;
+}
+
+.resource-library__description {
+  font-size: 20px;
+  color: var(--primary-medium);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.resource-library__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--primary-low);
+}
+
+.resource-library__tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.resource-library__tab {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--primary-low);
+  background: var(--secondary);
+  color: var(--primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: var(--primary-very-low);
+  }
+
+  &--active {
+    background: rgb(27, 58, 92);
+    color: var(--secondary);
+    border-color: var(--primary);
+
+    &:hover {
+      background: var(--primary-high);
+    }
+  }
+}
+
+.resource-library__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.resource-library__search-input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--primary-low);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  width: 220px;
+  background: var(--secondary);
+  color: var(--primary);
+  transition: border-color 0.15s ease;
+
+  &::placeholder {
+    color: var(--primary-medium);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--tertiary);
+    box-shadow: 0 0 0 2px rgba(var(--tertiary-rgb), 0.15);
+  }
+}
+
+.resource-library__manage-btn {
+  margin-top: -9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--primary-low);
+  background: var(--secondary);
+  color: var(--primary-medium);
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: var(--primary-very-low);
+    color: var(--primary);
+    border-color: var(--primary-low-mid);
+  }
+}
+
+.resource-library__new-btn {
+  margin-top: -9px;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: none;
+  background: rgb(27, 58, 92);
+  color: var(--secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--tertiary-hover);
+    opacity: 0.9;
+  }
+}
+
+.resource-library__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.resource-library__loading,
+.resource-library__empty {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--primary-medium);
+  font-size: 0.95rem;
+}
+
+// Category Node Styles
+.category-node {
+  margin-bottom: 0;
+
+  & > .category-node__header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--primary-low);
+  }
+}
+
+// Top-level categories (direct children of content)
+.resource-library__content > .category-node {
+  margin-bottom: 1.5rem;
+
+  & > .category-node__header {
+    border-bottom: 2.5px solid rgb(27, 58, 92);
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  & > .category-node__header .category-node__color {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  & > .category-node__header .category-node__name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+}
+
+.category-node__color {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.category-node__name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--primary-high);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.category-node__children {
+  padding-left: 1rem;
+}
+
+.category-node__topics {
+  list-style: none;
+  margin: 0.25rem 0 0.5rem 1.25rem;
+  padding: 0;
+}
+
+.category-node__topic {
+  padding: 0.2rem 0;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.category-node__delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--primary-low-mid);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  opacity: 0;
+
+  .category-node__topic:hover & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: #fee2e2;
+    color: #dc2626;
+  }
+}
+
+.category-node__topic-link {
+  font-size: 0.875rem;
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--tertiary);
+    text-decoration: underline;
+  }
+}
+
+
+// ==============================================
+// Resource Topic View (single topic page)
+// ==============================================
+
+// Hide default topic page elements for resource categories
+body[class*="category-resource-library"],
+body[class*="category-california-resource-library"] {
+  // Hide title (we show it in our banner)
+  #topic-title {
+    display: none !important;
+  }
+
+  // Hide all posts except the first
+  .topic-post:not(:first-child) {
+    display: none !important;
+  }
+
+  // Hide post action buttons
+  .post-menu-area,
+  .post-actions {
+    display: none !important;
+  }
+
+  // Hide timeline / progress
+  .topic-navigation,
+  .timeline-container,
+  .topic-progress {
+    display: none !important;
+  }
+
+  // Hide reply area and footer buttons
+  .topic-footer-buttons {
+    display: none !important;
+  }
+
+  // Hide suggested / related topics
+  .more-topics__container,
+  .suggested-topics {
+    display: none !important;
+  }
+
+  // Hide post meta (like count, read time etc)
+  .post-info,
+  .topic-map {
+    display: none !important;
+  }
+
+  // Hide topic stats and meta bar widgets from other theme components
+  .thr-topic-stats,
+  .thr-meta-bar {
+    display: none !important;
+  }
+
+  // Remove post row card styling
+  .post__row.row {
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin-bottom: 0 !important;
+    background: transparent !important;
+  }
+
+  // Hide topic meta data
+  .topic-meta-data {
+    display: none !important;
+  }
+
+  // Increase post text size
+  .cooked {
+    font-size: 105% !important;
+  }
+
+  // Clean up post styling
+  .topic-body {
+    border: none;
+    padding-top: 0;
+  }
+
+  .topic-post:first-child {
+    .topic-avatar {
+      display: none !important;
+    }
+
+    .topic-body {
+      width: 100%;
+      float: none;
+      margin-left: 0;
+    }
+
+    .post-info.edits,
+    .post-info.reads,
+    .read-state {
+      display: none !important;
+    }
+  }
+
+  // Style the first post content cleanly
+  .cooked {
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: var(--primary);
+    max-width: 900px;
+    padding: 2rem 0;
+  }
+}
+
+// Fallback: hide elements when resource topic banner is visible (for topic pages where body class differs)
+.resource-topic-view ~ #topic-title,
+.resource-topic-view ~ .post-stream .topic-meta-data,
+.resource-topic-view ~ .post-stream .thr-topic-stats,
+.resource-topic-view ~ .post-stream .thr-meta-bar {
+  display: none !important;
+}
+
+body:has(.resource-topic-view) {
+  #topic-title {
+    display: none !important;
+  }
+
+  .topic-meta-data {
+    display: none !important;
+  }
+
+  .thr-topic-stats,
+  .thr-meta-bar {
+    display: none !important;
+  }
+
+  .topic-post:not(:first-child) {
+    display: none !important;
+  }
+
+  .post-menu-area,
+  .post-actions {
+    display: none !important;
+  }
+
+  .topic-navigation,
+  .timeline-container,
+  .topic-progress {
+    display: none !important;
+  }
+
+  .topic-footer-buttons,
+  #reply-control {
+    display: none !important;
+  }
+
+  .more-topics__container,
+  .suggested-topics {
+    display: none !important;
+  }
+
+  .post-info,
+  .topic-map {
+    display: none !important;
+  }
+
+  .post__row.row {
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin-bottom: 0 !important;
+    background: transparent !important;
+  }
+
+  .topic-body {
+    border: none;
+    padding-top: 0;
+  }
+
+  .topic-post:first-child {
+    .topic-avatar {
+      display: none !important;
+    }
+
+    .topic-body {
+      width: 100%;
+      float: none;
+      margin-left: 0;
+    }
+  }
+
+  .cooked {
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: var(--primary);
+    max-width: 900px;
+    padding: 2rem 0;
+  }
+}
+
+.resource-topic-view {
+  margin-bottom: 1.5rem;
+}
+
+.resource-topic-view__back {
+  display: inline-block;
+  font-size: 0.9rem;
+  color: var(--tertiary);
+  text-decoration: none;
+  margin-bottom: 1.25rem;
+  font-weight: 500;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.resource-topic-view__banner {
+  background: linear-gradient(135deg, #1e3a5f 0%, #2a5f7a 60%, #3a8f8f 100%);
+  border-radius: 12px;
+  padding: 2.5rem 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.resource-topic-view__banner-content {
+  position: relative;
+  z-index: 1;
+}
+
+.resource-topic-view__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.resource-topic-view__tag {
+  display: inline-block;
+  padding: 0.3rem 0.75rem;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.01em;
+}
+
+.resource-topic-view__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+  line-height: 1.3;
+  max-width: 700px;
+}
+
+// Responsive - Topic View
+@media (max-width: 768px) {
+  .resource-topic-view__banner {
+    padding: 1.5rem 1.25rem;
+    border-radius: 8px;
+  }
+
+  .resource-topic-view__title {
+    font-size: 1.35rem;
+  }
+}
+
+// Responsive
+@media (max-width: 768px) {
+  .resource-library__controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .resource-library__actions {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .resource-library__search-input {
+    width: 100%;
+  }
+
+  .resource-library__tabs {
+    width: 100%;
+  }
+
+  .resource-library__tab {
+    flex: 1;
+    text-align: center;
+  }
+
+  .category-node__children {
+    padding-left: 0.5rem;
+  }
+}
