@@ -123,7 +123,9 @@ export default class ResourceLibrary extends Component {
           (t) => t.title && t.title.startsWith("[resource-order-config]")
         );
         if (configTopic) {
-          configMap[r.id] = { topicId: configTopic.id };
+          const orderStr = configTopic.title.replace("[resource-order-config]", "").trim();
+          const ids = orderStr.split(",").map(Number).filter((n) => n > 0);
+          configMap[r.id] = { topicId: configTopic.id, orderedIds: ids };
         }
         map[r.id] = r.topics.filter((t) => !this.isAboutTopic(t));
       });
@@ -131,40 +133,6 @@ export default class ResourceLibrary extends Component {
 
     this.topicsMap = map;
     this.orderConfigMap = configMap;
-    this._loadOrderConfigs(configMap);
-  }
-
-  async _loadOrderConfigs(configMap) {
-    const entries = Object.entries(configMap);
-    if (entries.length === 0) return;
-
-    const newConfigMap = { ...configMap };
-
-    for (const [catId, cfg] of entries) {
-      try {
-        const topicData = await ajax(`/t/${cfg.topicId}.json`);
-        const postId = topicData.post_stream?.posts?.[0]?.id;
-        if (!postId) continue;
-
-        const postData = await ajax(`/posts/${postId}.json`);
-        const raw = postData.raw || "";
-        const match = raw.match(/```\n?([\s\S]*?)\n?```/);
-        if (match) {
-          const parsed = JSON.parse(match[1].trim());
-          if (Array.isArray(parsed)) {
-            newConfigMap[catId] = {
-              ...newConfigMap[catId],
-              postId,
-              orderedIds: parsed,
-            };
-          }
-        }
-      } catch (e) {
-        // topic not accessible or parse failed
-      }
-    }
-
-    this.orderConfigMap = newConfigMap;
   }
 
   isAboutTopic(topic) {
@@ -335,7 +303,7 @@ export default class ResourceLibrary extends Component {
   @action
   updateOrderConfig(categoryId, topicId, postId, orderedIds) {
     const newMap = { ...this.orderConfigMap };
-    newMap[categoryId] = { topicId, postId, orderedIds };
+    newMap[categoryId] = { topicId, orderedIds };
     this.orderConfigMap = newMap;
   }
 

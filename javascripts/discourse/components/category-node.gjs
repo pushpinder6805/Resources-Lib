@@ -132,31 +132,31 @@ export default class CategoryNode extends Component {
   async saveOrder() {
     this.savingOrder = true;
     try {
-      const orderData = JSON.stringify(this.localOrderedIds || []);
-      const rawContent = `${CONFIG_TOPIC_PREFIX}\n\n\`\`\`\n${orderData}\n\`\`\``;
+      const ids = this.localOrderedIds || [];
+      const newTitle = `${CONFIG_TOPIC_PREFIX} ${ids.join(",")}`;
       const config = this.orderConfig;
       const catId = this.args.category.id;
 
-      if (config?.topicId && config?.postId) {
-        await ajax(`/posts/${config.postId}`, {
+      if (config?.topicId) {
+        await ajax(`/t/${config.topicId}`, {
           type: "PUT",
-          data: { post: { raw: rawContent } },
+          data: { title: newTitle },
         });
         if (this.args.onOrderSaved) {
-          this.args.onOrderSaved(catId, config.topicId, config.postId, this.localOrderedIds);
+          this.args.onOrderSaved(catId, config.topicId, null, ids);
         }
       } else {
         const result = await ajax("/posts", {
           type: "POST",
           data: {
-            title: `${CONFIG_TOPIC_PREFIX} ${this.args.category.name}`,
-            raw: rawContent,
+            title: newTitle,
+            raw: "This topic stores the display order for this category. Do not delete.",
             category: catId,
             archetype: "regular",
           },
         });
         if (result && this.args.onOrderSaved) {
-          this.args.onOrderSaved(catId, result.topic_id, result.id, this.localOrderedIds);
+          this.args.onOrderSaved(catId, result.topic_id, null, ids);
         }
       }
 
