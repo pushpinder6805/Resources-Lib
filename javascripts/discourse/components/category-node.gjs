@@ -125,6 +125,20 @@ export default class CategoryNode extends Component {
     this.localOrderedIds = ids;
   }
 
+  async _getThemeId() {
+    const themes = await ajax("/admin/themes.json");
+    const allThemes = [...(themes.themes || [])];
+    for (const theme of allThemes) {
+      if (theme.child_themes) {
+        allThemes.push(...theme.child_themes);
+      }
+    }
+    const match = allThemes.find(
+      (t) => t.name === "Resource-Library" || t.name === "resource-library"
+    );
+    return match?.id;
+  }
+
   @action
   async saveOrder() {
     this.savingOrder = true;
@@ -139,7 +153,11 @@ export default class CategoryNode extends Component {
       });
       dataMap[catId] = ids;
 
-      const themeId = settings.theme_id;
+      const themeId = await this._getThemeId();
+      if (!themeId) {
+        throw new Error("Could not find Resource-Library theme component");
+      }
+
       await ajax(`/admin/themes/${themeId}/setting`, {
         type: "PUT",
         data: {
