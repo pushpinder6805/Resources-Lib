@@ -26,6 +26,7 @@ export default class ResourceLibrary extends Component {
   ROOTS = [
     { id: 10, label: "All Resources" },
     { id: 61, label: "California Resources" },
+    { id: 141, label: "All States Resources" },
   ];
 
   constructor() {
@@ -33,6 +34,8 @@ export default class ResourceLibrary extends Component {
     const category = this.args.category;
     if (category && category.id === 61) {
       this.activeRootId = 61;
+    } else if (category && category.id === 141) {
+      this.activeRootId = 141;
     }
     this._initLoad();
   }
@@ -47,6 +50,9 @@ export default class ResourceLibrary extends Component {
   get dynamicTitle() {
     if (this.activeRootId === 61) {
       return "California Resource Library";
+    }
+    if (this.activeRootId === 141) {
+      return "All States Resource Library";
     }
     return "Resource Library";
   }
