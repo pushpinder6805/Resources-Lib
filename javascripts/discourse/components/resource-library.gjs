@@ -23,11 +23,16 @@ export default class ResourceLibrary extends Component {
   @tracked searchQuery = "";
   @tracked loading = true;
 
-  ROOTS = [
-    { id: 10, label: "All Resources" },
-    { id: 61, label: "California Resources" },
-    { id: 141, label: "All States Resources" },
-  ];
+  get ROOTS() {
+    const roots = [
+      { id: 10, label: "All Resources" },
+      { id: 61, label: "California Resources" },
+    ];
+    if (settings?.enable_all_states_library) {
+      roots.push({ id: 141, label: "All States Resources" });
+    }
+    return roots;
+  }
 
   constructor() {
     super(...arguments);

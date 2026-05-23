@@ -1,3 +1,8 @@
+enable_all_states_library:
+  type: bool
+  default: false
+  description: "Show the All States Resource Library tab"
+
 resource_root_category_ids:
   type: list
   default: "10|61"
