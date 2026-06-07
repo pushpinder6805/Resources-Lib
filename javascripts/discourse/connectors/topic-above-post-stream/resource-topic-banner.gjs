@@ -1,6 +1,6 @@
 import Component from "@glimmer/component";
 
-const RESOURCE_ROOT_IDS = [10, 61];
+const RESOURCE_ROOT_IDS = [10, 61, 197];
 
 export default class ResourceTopicBanner extends Component {
   get topic() {

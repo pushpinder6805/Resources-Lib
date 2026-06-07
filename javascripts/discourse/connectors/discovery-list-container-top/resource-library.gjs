@@ -2,7 +2,7 @@ import Component from "@glimmer/component";
 import ResourceLibrary from "../../components/resource-library";
 
 export default class ResourceLibraryConnector extends Component {
-  RESOURCE_CATEGORY_IDS = [10, 61];
+  RESOURCE_CATEGORY_IDS = [10, 61, 197];
 
   get shouldShow() {
     const category = this.args.outletArgs?.category;
