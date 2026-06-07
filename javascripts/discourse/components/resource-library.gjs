@@ -24,15 +24,11 @@ export default class ResourceLibrary extends Component {
   @tracked loading = true;
 
   get ROOTS() {
-    const roots = [
+    return [
       { id: 10, label: "All Resources" },
       { id: 61, label: "California Resources" },
-      { id: 197, label: "197 Resources" },
+      { id: 197, label: "All States Resources" },
     ];
-    if (settings?.enable_all_states_library) {
-      roots.push({ id: 141, label: "All States Resources" });
-    }
-    return roots;
   }
 
   constructor() {
@@ -42,8 +38,6 @@ export default class ResourceLibrary extends Component {
       this.activeRootId = 61;
     } else if (category && category.id === 197) {
       this.activeRootId = 197;
-    } else if (category && category.id === 141) {
-      this.activeRootId = 141;
     }
     this._initLoad();
   }
@@ -60,9 +54,6 @@ export default class ResourceLibrary extends Component {
       return "California Resource Library";
     }
     if (this.activeRootId === 197) {
-      return "197 Resource Library";
-    }
-    if (this.activeRootId === 141) {
       return "All States Resource Library";
     }
     return "Resource Library";
