@@ -71,31 +71,42 @@ export default class ResourceLibrary extends Component {
     return category.parent_category_id ?? category.parentCategory?.id ?? null;
   }
 
+  async _fetchChildren(parentId) {
+    const allCategories = this.site.categories || [];
+    const fromSite = allCategories.filter(
+      (c) => this.getParentId(c) === parentId
+    );
+    if (fromSite.length > 0) {
+      return fromSite;
+    }
+    try {
+      const result = await ajax(`/categories.json?parent_category_id=${parentId}`);
+      return result?.category_list?.categories || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   async loadData() {
     this.loading = true;
     this.topicsMap = {};
     this.categories = [];
 
     try {
-      const allCategories = this.site.categories || [];
-      const children = allCategories.filter(
-        (c) => this.getParentId(c) === this.activeRootId
-      );
+      const children = await this._fetchChildren(this.activeRootId);
 
-      const tree = children.map((parent) => {
-        const subs = allCategories.filter(
-          (c) => this.getParentId(c) === parent.id
-        );
-        return {
-          ...parent,
-          subcategories: subs.map((sub) => {
-            const subSubs = allCategories.filter(
-              (c) => this.getParentId(c) === sub.id
-            );
-            return { ...sub, subcategories: subSubs };
-          }),
-        };
-      });
+      const tree = await Promise.all(
+        children.map(async (parent) => {
+          const subs = await this._fetchChildren(parent.id);
+          const subsWithChildren = await Promise.all(
+            subs.map(async (sub) => {
+              const subSubs = await this._fetchChildren(sub.id);
+              return { ...sub, subcategories: subSubs.map((s) => ({ ...s, subcategories: [] })) };
+            })
+          );
+          return { ...parent, subcategories: subsWithChildren };
+        })
+      );
 
       this.categories = tree;
       await this.loadAllTopics(tree);
@@ -136,11 +147,12 @@ export default class ResourceLibrary extends Component {
 
     for (const batch of batches) {
       const results = await Promise.all(
-        batch.map((cat) =>
-          ajax(`/c/${cat.slug}/${cat.id}/l/latest.json?per_page=30`)
+        batch.map((cat) => {
+          const slug = cat.slug || "-";
+          return ajax(`/c/${slug}/${cat.id}/l/latest.json?per_page=30`)
             .then((res) => ({ id: cat.id, topics: res.topic_list?.topics || [] }))
-            .catch(() => ({ id: cat.id, topics: [] }))
-        )
+            .catch(() => ({ id: cat.id, topics: [] }));
+        })
       );
       results.forEach((r) => {
         map[r.id] = r.topics.filter((t) => !this.isAboutTopic(t));
