@@ -82,18 +82,30 @@ export default class ResourceLibrary extends Component {
         (c) => this.getParentId(c) === this.activeRootId
       );
 
+      const wrap = (cat) => ({
+        id: cat.id,
+        name: cat.name,
+        slug: cat.slug,
+        color: cat.color,
+        text_color: cat.text_color,
+        description: cat.description,
+        topic_count: cat.topic_count,
+        parent_category_id: this.getParentId(cat),
+      });
+
       const tree = children.map((parent) => {
         const subs = allCategories.filter(
           (c) => this.getParentId(c) === parent.id
         );
-        parent.subcategories = subs.map((sub) => {
-          const subSubs = allCategories.filter(
-            (c) => this.getParentId(c) === sub.id
-          );
-          sub.subcategories = subSubs;
-          return sub;
-        });
-        return parent;
+        return {
+          ...wrap(parent),
+          subcategories: subs.map((sub) => {
+            const subSubs = allCategories.filter(
+              (c) => this.getParentId(c) === sub.id
+            );
+            return { ...wrap(sub), subcategories: subSubs.map(wrap) };
+          }),
+        };
       });
 
       this.categories = tree;
