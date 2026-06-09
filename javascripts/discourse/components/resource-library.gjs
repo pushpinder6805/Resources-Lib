@@ -130,13 +130,6 @@ export default class ResourceLibrary extends Component {
     if (parentId) {
       const parent = allCategories.find((c) => c.id === parentId);
       if (parent) {
-        const grandparentId = this.getParentId(parent);
-        if (grandparentId) {
-          const grandparent = allCategories.find((c) => c.id === grandparentId);
-          if (grandparent) {
-            return `/c/${grandparent.slug}/${parent.slug}/${cat.slug}/${cat.id}`;
-          }
-        }
         return `/c/${parent.slug}/${cat.slug}/${cat.id}`;
       }
     }
