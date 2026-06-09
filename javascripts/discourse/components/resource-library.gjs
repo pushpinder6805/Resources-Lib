@@ -86,15 +86,14 @@ export default class ResourceLibrary extends Component {
         const subs = allCategories.filter(
           (c) => this.getParentId(c) === parent.id
         );
-        return {
-          ...parent,
-          subcategories: subs.map((sub) => {
-            const subSubs = allCategories.filter(
-              (c) => this.getParentId(c) === sub.id
-            );
-            return { ...sub, subcategories: subSubs };
-          }),
-        };
+        parent.subcategories = subs.map((sub) => {
+          const subSubs = allCategories.filter(
+            (c) => this.getParentId(c) === sub.id
+          );
+          sub.subcategories = subSubs;
+          return sub;
+        });
+        return parent;
       });
 
       this.categories = tree;
@@ -127,10 +126,13 @@ export default class ResourceLibrary extends Component {
   getCategoryUrl(cat) {
     const allCategories = this.site.categories || [];
     const parentId = this.getParentId(cat);
+    console.log("[getCategoryUrl]", cat.slug, cat.id, "parentId:", parentId);
     if (parentId) {
       const parent = allCategories.find((c) => c.id === parentId);
       if (parent) {
-        return `/c/${parent.slug}/${cat.slug}/${cat.id}`;
+        const url = `/c/${parent.slug}/${cat.slug}/${cat.id}`;
+        console.log("[getCategoryUrl] built URL:", url);
+        return url;
       }
     }
     return `/c/${cat.slug}/${cat.id}`;
