@@ -78,13 +78,9 @@ export default class ResourceLibrary extends Component {
 
     try {
       const allCategories = this.site.categories || [];
-      console.log("[ResourceLibrary] activeRootId:", this.activeRootId);
-      console.log("[ResourceLibrary] total site.categories count:", allCategories.length);
-
       const children = allCategories.filter(
         (c) => this.getParentId(c) === this.activeRootId
       );
-      console.log("[ResourceLibrary] children of root", this.activeRootId, ":", children.length, children.map((c) => ({ id: c.id, name: c.name, slug: c.slug, parent_category_id: c.parent_category_id })));
 
       const tree = children.map((parent) => {
         const subs = allCategories.filter(
@@ -101,16 +97,9 @@ export default class ResourceLibrary extends Component {
         };
       });
 
-      const leafCategories = this.getLeafCategories(tree);
-      console.log("[ResourceLibrary] tree nodes:", tree.length);
-      console.log("[ResourceLibrary] leaf categories for topic fetch:", leafCategories.map((c) => ({ id: c.id, name: c.name, slug: c.slug })));
-
       this.categories = tree;
       await this.loadAllTopics(tree);
-      console.log("[ResourceLibrary] topicsMap keys:", Object.keys(this.topicsMap));
-      console.log("[ResourceLibrary] topicsMap counts:", Object.entries(this.topicsMap).map(([k, v]) => `${k}: ${v.length} topics`));
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error("ResourceLibrary: failed to load", e);
     } finally {
       this.loading = false;
@@ -135,6 +124,25 @@ export default class ResourceLibrary extends Component {
     }
   }
 
+  getCategoryUrl(cat) {
+    const allCategories = this.site.categories || [];
+    const parentId = this.getParentId(cat);
+    if (parentId) {
+      const parent = allCategories.find((c) => c.id === parentId);
+      if (parent) {
+        const grandparentId = this.getParentId(parent);
+        if (grandparentId) {
+          const grandparent = allCategories.find((c) => c.id === grandparentId);
+          if (grandparent) {
+            return `/c/${grandparent.slug}/${parent.slug}/${cat.slug}/${cat.id}`;
+          }
+        }
+        return `/c/${parent.slug}/${cat.slug}/${cat.id}`;
+      }
+    }
+    return `/c/${cat.slug}/${cat.id}`;
+  }
+
   async loadAllTopics(tree) {
     const leafCategories = this.getLeafCategories(tree);
     const map = {};
@@ -147,7 +155,7 @@ export default class ResourceLibrary extends Component {
     for (const batch of batches) {
       const results = await Promise.all(
         batch.map((cat) =>
-          ajax(`/c/${cat.slug}/${cat.id}/l/latest.json?per_page=30`)
+          ajax(`${this.getCategoryUrl(cat)}/l/latest.json?per_page=30`)
             .then((res) => ({ id: cat.id, topics: res.topic_list?.topics || [] }))
             .catch(() => ({ id: cat.id, topics: [] }))
         )
