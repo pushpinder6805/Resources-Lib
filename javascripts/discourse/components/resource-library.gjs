@@ -137,21 +137,18 @@ export default class ResourceLibrary extends Component {
 
   getCategoryUrl(cat) {
     const allCategories = this.site.categories || [];
-    const parentId = this.getParentId(cat);
-    console.log("[getCategoryUrl]", cat.slug, cat.id, "parentId:", parentId);
+    const parentId = cat.parent_category_id;
     if (parentId) {
       const parent = allCategories.find((c) => c.id === parentId);
       if (parent) {
-        const url = `/c/${parent.slug}/${cat.slug}/${cat.id}`;
-        console.log("[getCategoryUrl] built URL:", url);
-        return url;
+        return `/c/${parent.slug}/${cat.slug}/${cat.id}`;
       }
     }
     return `/c/${cat.slug}/${cat.id}`;
   }
 
   async loadAllTopics(tree) {
-    const leafCategories = this.getLeafCategories(tree);
+    const leafCategories = this.getLeafCategories(tree).filter((c) => c.slug && c.id);
     const map = {};
 
     const batches = [];
@@ -160,15 +157,16 @@ export default class ResourceLibrary extends Component {
     }
 
     for (const batch of batches) {
-      const results = await Promise.all(
+      const results = await Promise.allSettled(
         batch.map((cat) =>
           ajax(`${this.getCategoryUrl(cat)}/l/latest.json?per_page=30`)
             .then((res) => ({ id: cat.id, topics: res.topic_list?.topics || [] }))
-            .catch(() => ({ id: cat.id, topics: [] }))
         )
       );
       results.forEach((r) => {
-        map[r.id] = r.topics.filter((t) => !this.isAboutTopic(t));
+        if (r.status === "fulfilled") {
+          map[r.value.id] = r.value.topics.filter((t) => !this.isAboutTopic(t));
+        }
       });
     }
 

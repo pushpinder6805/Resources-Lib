@@ -202,13 +202,6 @@ body.category-california-resource-library {
     margin-bottom: 0.5rem;
   }
 
-  & > .category-node__header .category-node__color {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
   & > .category-node__header .category-node__name {
     font-size: 1.1rem;
     font-weight: 700;
@@ -217,13 +210,6 @@ body.category-california-resource-library {
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
-}
-
-.category-node__color {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
 }
 
 .category-node__name {
