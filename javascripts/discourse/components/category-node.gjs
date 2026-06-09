@@ -182,7 +182,9 @@ export default class CategoryNode extends Component {
   <template>
     <div class="category-node">
       <div class="category-node__header">
-        <span class="category-node__color" style="background-color: #{{@category.color}};"></span>
+        {{#if @category.color}}
+          <span class="category-node__color" style="background-color: #{{@category.color}};"></span>
+        {{/if}}
         <h2 class="category-node__name">{{@category.name}}</h2>
         {{#if this.canReorder}}
           {{#unless this.reorderMode}}
