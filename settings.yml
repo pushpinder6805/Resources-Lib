@@ -1,7 +1,7 @@
 resource_root_category_ids:
   type: list
-  default: "10|61"
-  description: "Root category IDs for Resource Library (pipe-separated, e.g. 10|61)"
+  default: "10|61|197"
+  description: "Root category IDs for Resource Library (pipe-separated, e.g. 10|61|197)"
 
 topics_per_category:
   type: integer

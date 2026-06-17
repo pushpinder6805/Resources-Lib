@@ -25,19 +25,17 @@ export default class ResourceLibrary extends Component {
 
   get ROOTS() {
     return [
-      { id: 10, label: "All Resources" },
-      { id: 61, label: "California Resources" },
-      { id: 197, label: "All States Resources" },
+      { id: 10, label: "All Resources", title: "Resource Library" },
+      { id: 61, label: "California Resources", title: "California Resource Library" },
+      { id: 197, label: "All States Resources", title: "All States Resource Library" },
     ];
   }
 
   constructor() {
     super(...arguments);
     const category = this.args.category;
-    if (category && category.id === 61) {
-      this.activeRootId = 61;
-    } else if (category && category.id === 197) {
-      this.activeRootId = 197;
+    if (category && this.ROOTS.some((root) => root.id === category.id)) {
+      this.activeRootId = category.id;
     }
     this._initLoad();
   }
@@ -50,13 +48,10 @@ export default class ResourceLibrary extends Component {
   }
 
   get dynamicTitle() {
-    if (this.activeRootId === 61) {
-      return "California Resource Library";
-    }
-    if (this.activeRootId === 197) {
-      return "All States Resource Library";
-    }
-    return "Resource Library";
+    return (
+      this.ROOTS.find((root) => root.id === this.activeRootId)?.title ||
+      "Resource Library"
+    );
   }
 
   get isStaffUser() {

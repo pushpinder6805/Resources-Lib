@@ -18,7 +18,20 @@
 
 // When browsing resource categories, hide the default topic list
 body.category-resource-library,
-body.category-california-resource-library {
+body.category-california-resource-library,
+body[class*="category-all-states-resource"] {
+  .topic-list,
+  .latest-topic-list-container,
+  #list-area .topic-list {
+    display: none !important;
+  }
+
+  .custom-category-header {
+    display: none !important;
+  }
+}
+
+body:has(.resource-library) {
   .topic-list,
   .latest-topic-list-container,
   #list-area .topic-list {
@@ -454,7 +467,8 @@ body.category-california-resource-library {
 
 // Hide default topic page elements for resource categories
 body[class*="category-resource-library"],
-body[class*="category-california-resource-library"] {
+body[class*="category-california-resource-library"],
+body[class*="category-all-states-resource"] {
   // Hide title (we show it in our banner)
   #topic-title {
     display: none !important;
