@@ -77,6 +77,21 @@ export default class ResourceLibrary extends Component {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  async requestJson(url) {
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      headers: {
+        accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed request: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
   async fetchAllCategories() {
     if (!this._categoriesPromise) {
       this._categoriesPromise = ajax("/categories.json")
@@ -244,7 +259,7 @@ export default class ResourceLibrary extends Component {
     for (const topicUrl of this.getCategoryTopicUrls(cat)) {
       for (let attempt = 0; attempt <= TOPIC_FETCH_RETRIES; attempt++) {
         try {
-          const res = await ajax(topicUrl);
+          const res = await this.requestJson(topicUrl);
           return {
             id: cat.id,
             topics: (res.topic_list?.topics || []).filter(
@@ -263,9 +278,9 @@ export default class ResourceLibrary extends Component {
   }
 
   async loadAllTopics(tree, requestId) {
-    const leafCategories = this.getLeafCategories(tree).filter((c) => c.slug && c.id);
+    const topicCategories = this.getTopicCategories(tree);
     const map = {};
-    const queue = [...leafCategories];
+    const queue = [...topicCategories];
     const workerCount = Math.min(TOPIC_FETCH_CONCURRENCY, queue.length);
 
     await Promise.all(
@@ -294,19 +309,30 @@ export default class ResourceLibrary extends Component {
     return topic.title && topic.title.toLowerCase().startsWith("about the");
   }
 
-  getLeafCategories(tree) {
-    const leaves = [];
+  getTopicCategories(tree) {
+    const categories = [];
+    const seen = new Set();
+
     const walk = (nodes) => {
-      nodes.forEach((n) => {
-        if (n.subcategories && n.subcategories.length > 0) {
-          walk(n.subcategories);
-        } else {
-          leaves.push(n);
+      nodes.forEach((node) => {
+        if (
+          node?.id &&
+          node?.slug &&
+          Number(node.topic_count) > 0 &&
+          !seen.has(node.id)
+        ) {
+          seen.add(node.id);
+          categories.push(node);
+        }
+
+        if (node.subcategories?.length) {
+          walk(node.subcategories);
         }
       });
     };
+
     walk(tree);
-    return leaves;
+    return categories;
   }
 
   @action
