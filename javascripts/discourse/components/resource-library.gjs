@@ -228,16 +228,14 @@ export default class ResourceLibrary extends Component {
 
   getCategoryUrls(cat) {
     const urls = [];
+    urls.push(`/c/${cat.slug}/${cat.id}`);
     if (cat.parent_slug) {
       urls.push(`/c/${cat.parent_slug}/${cat.slug}/${cat.id}`);
     }
-    urls.push(`/c/${cat.slug}/${cat.id}`);
     return [...new Set(urls)];
   }
 
   async fetchCategoryTopics(cat) {
-    let lastError;
-
     for (const categoryUrl of this.getCategoryUrls(cat)) {
       for (let attempt = 0; attempt <= TOPIC_FETCH_RETRIES; attempt++) {
         try {
@@ -249,7 +247,6 @@ export default class ResourceLibrary extends Component {
             ),
           };
         } catch (e) {
-          lastError = e;
           if (attempt < TOPIC_FETCH_RETRIES) {
             await this.delay(250 * (attempt + 1));
           }
@@ -257,7 +254,6 @@ export default class ResourceLibrary extends Component {
       }
     }
 
-    console.warn("ResourceLibrary: failed to load topics for category", cat.id, lastError);
     return { id: cat.id, topics: [] };
   }
 
@@ -271,7 +267,10 @@ export default class ResourceLibrary extends Component {
       Array.from({ length: workerCount }, async () => {
         while (queue.length > 0) {
           const cat = queue.shift();
-          const result = await this.fetchCategoryTopics(cat);
+          const result = await this.fetchCategoryTopics(cat).catch(() => ({
+            id: cat.id,
+            topics: [],
+          }));
           map[result.id] = result.topics;
 
           if (requestId === this._loadRequestId) {
