@@ -11,6 +11,7 @@ import CategoryNode from "./category-node";
 
 const TOPIC_FETCH_CONCURRENCY = 12;
 const TOPIC_FETCH_RETRIES = 2;
+const CATEGORY_TREE_DEPTH = 3;
 
 export default class ResourceLibrary extends Component {
   @service composer;
@@ -171,12 +172,13 @@ export default class ResourceLibrary extends Component {
       };
     };
 
-    const buildChildren = (parentId) => {
+    const buildChildren = (parentId, depth = 1) => {
       return [...(childrenByParentId[parentId] || [])]
         .sort((a, b) => this.compareCategoriesByDiscourseOrder(categoryOrder, a, b))
         .map((category) => ({
           ...wrap(category),
-          subcategories: buildChildren(category.id),
+          subcategories:
+            depth < CATEGORY_TREE_DEPTH ? buildChildren(category.id, depth + 1) : [],
         }));
     };
 
@@ -226,20 +228,23 @@ export default class ResourceLibrary extends Component {
     }
   }
 
-  getCategoryUrls(cat) {
-    const urls = [];
-    urls.push(`/c/${cat.slug}/${cat.id}`);
+  getCategoryTopicUrls(cat) {
+    const baseUrls = [`/c/${cat.slug}/${cat.id}`];
     if (cat.parent_slug) {
-      urls.push(`/c/${cat.parent_slug}/${cat.slug}/${cat.id}`);
+      baseUrls.push(`/c/${cat.parent_slug}/${cat.slug}/${cat.id}`);
     }
-    return [...new Set(urls)];
+
+    return [...new Set(baseUrls)].flatMap((categoryUrl) => [
+      `${categoryUrl}.json?per_page=30`,
+      `${categoryUrl}/l/latest.json?per_page=30`,
+    ]);
   }
 
   async fetchCategoryTopics(cat) {
-    for (const categoryUrl of this.getCategoryUrls(cat)) {
+    for (const topicUrl of this.getCategoryTopicUrls(cat)) {
       for (let attempt = 0; attempt <= TOPIC_FETCH_RETRIES; attempt++) {
         try {
-          const res = await ajax(`${categoryUrl}/l/latest.json?per_page=30`);
+          const res = await ajax(topicUrl);
           return {
             id: cat.id,
             topics: (res.topic_list?.topics || []).filter(
