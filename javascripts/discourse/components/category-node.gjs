@@ -82,12 +82,16 @@ export default class CategoryNode extends Component {
     return this.args.category.subcategories || [];
   }
 
-  get isLeafCategory() {
-    return !this.subcategories || this.subcategories.length === 0;
+  get hasSubcategories() {
+    return this.subcategories.length > 0;
+  }
+
+  get hasTopics() {
+    return this.topics.length > 0;
   }
 
   get canReorder() {
-    return this.args.isStaff && this.isLeafCategory && this.topics.length > 1;
+    return this.args.isStaff && this.topics.length > 1;
   }
 
   @action
@@ -199,7 +203,7 @@ export default class CategoryNode extends Component {
         {{/if}}
       </div>
 
-      {{#if this.subcategories.length}}
+      {{#if this.hasSubcategories}}
         <div class="category-node__children">
           {{#each this.subcategories as |subCat|}}
             <CategoryNode
@@ -215,7 +219,9 @@ export default class CategoryNode extends Component {
             />
           {{/each}}
         </div>
-      {{else}}
+      {{/if}}
+
+      {{#if this.hasTopics}}
         {{#if this.reorderMode}}
           <div class="category-node__reorder-bar">
             <span class="category-node__reorder-label">Reorder mode</span>
