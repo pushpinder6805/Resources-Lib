@@ -91,27 +91,61 @@ export default class ResourceLibrary extends Component {
   async getAvailableCategories() {
     const siteCategories = this.site.categories || [];
     const fetchedCategories = await this.fetchAllCategories();
-    const categoriesById = {};
+    const orderedCategories = [];
+    const seenCategoryIds = new Set();
 
-    [...siteCategories, ...fetchedCategories].forEach((category) => {
-      if (category?.id) {
-        categoriesById[category.id] = category;
+    const addCategory = (category) => {
+      if (!category?.id || seenCategoryIds.has(category.id)) {
+        return;
       }
-    });
+      seenCategoryIds.add(category.id);
+      orderedCategories.push(category);
+    };
 
-    return Object.values(categoriesById);
+    const primaryCategories = fetchedCategories.length > 0 ? fetchedCategories : siteCategories;
+    const fallbackCategories = fetchedCategories.length > 0 ? siteCategories : fetchedCategories;
+    primaryCategories.forEach(addCategory);
+    fallbackCategories.forEach(addCategory);
+
+    return orderedCategories;
+  }
+
+  getCategoryPosition(category) {
+    const position = Number(category?.position);
+    return Number.isFinite(position) ? position : null;
+  }
+
+  compareCategoriesByDiscourseOrder(categoryOrder, a, b) {
+    const positionA = this.getCategoryPosition(a);
+    const positionB = this.getCategoryPosition(b);
+
+    if (positionA !== null && positionB !== null && positionA !== positionB) {
+      return positionA - positionB;
+    }
+
+    if (positionA !== null && positionB === null) {
+      return -1;
+    }
+
+    if (positionA === null && positionB !== null) {
+      return 1;
+    }
+
+    return (categoryOrder.get(a.id) ?? 0) - (categoryOrder.get(b.id) ?? 0);
   }
 
   buildCategoryTree(rootId, allCategories) {
-    const categoriesById = {};
+    const categoriesById = new Map();
+    const categoryOrder = new Map();
     const childrenByParentId = {};
 
-    allCategories.forEach((category) => {
+    allCategories.forEach((category, index) => {
       if (!category?.id) {
         return;
       }
 
-      categoriesById[category.id] = category;
+      categoriesById.set(category.id, category);
+      categoryOrder.set(category.id, index);
       const parentId = this.getParentId(category);
       if (parentId) {
         if (!childrenByParentId[parentId]) {
@@ -123,7 +157,7 @@ export default class ResourceLibrary extends Component {
 
     const wrap = (cat) => {
       const parentId = this.getParentId(cat);
-      const parent = parentId ? categoriesById[parentId] : null;
+      const parent = parentId ? categoriesById.get(parentId) : null;
       return {
         id: cat.id,
         name: cat.name,
@@ -138,10 +172,12 @@ export default class ResourceLibrary extends Component {
     };
 
     const buildChildren = (parentId) => {
-      return (childrenByParentId[parentId] || []).map((category) => ({
-        ...wrap(category),
-        subcategories: buildChildren(category.id),
-      }));
+      return [...(childrenByParentId[parentId] || [])]
+        .sort((a, b) => this.compareCategoriesByDiscourseOrder(categoryOrder, a, b))
+        .map((category) => ({
+          ...wrap(category),
+          subcategories: buildChildren(category.id),
+        }));
     };
 
     return buildChildren(rootId);
