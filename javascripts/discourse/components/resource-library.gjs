@@ -9,6 +9,9 @@ import { ajax } from "discourse/lib/ajax";
 import Composer from "discourse/models/composer";
 import CategoryNode from "./category-node";
 
+const TOPIC_FETCH_CONCURRENCY = 12;
+const TOPIC_FETCH_RETRIES = 2;
+
 export default class ResourceLibrary extends Component {
   @service composer;
   @service router;
@@ -22,6 +25,9 @@ export default class ResourceLibrary extends Component {
   @tracked _orderOverride = null;
   @tracked searchQuery = "";
   @tracked loading = true;
+
+  _categoriesPromise = null;
+  _loadRequestId = 0;
 
   get ROOTS() {
     return [
@@ -42,7 +48,7 @@ export default class ResourceLibrary extends Component {
 
   async _initLoad() {
     await this.loadData();
-    if (this.categories.length === 0 && this.site.categories?.length === 0) {
+    if (this.categories.length === 0) {
       setTimeout(() => this.loadData(), 1000);
     }
   }
@@ -66,18 +72,59 @@ export default class ResourceLibrary extends Component {
     return category.parent_category_id ?? category.parentCategory?.id ?? null;
   }
 
-  async loadData() {
-    this.loading = true;
-    this.topicsMap = {};
-    this.categories = [];
+  delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 
-    try {
-      const allCategories = this.site.categories || [];
-      const children = allCategories.filter(
-        (c) => this.getParentId(c) === this.activeRootId
-      );
+  async fetchAllCategories() {
+    if (!this._categoriesPromise) {
+      this._categoriesPromise = ajax("/categories.json")
+        .then((result) => result?.category_list?.categories || [])
+        .catch(() => {
+          this._categoriesPromise = null;
+          return [];
+        });
+    }
+    return this._categoriesPromise;
+  }
 
-      const wrap = (cat) => ({
+  async getAvailableCategories() {
+    const siteCategories = this.site.categories || [];
+    const fetchedCategories = await this.fetchAllCategories();
+    const categoriesById = {};
+
+    [...siteCategories, ...fetchedCategories].forEach((category) => {
+      if (category?.id) {
+        categoriesById[category.id] = category;
+      }
+    });
+
+    return Object.values(categoriesById);
+  }
+
+  buildCategoryTree(rootId, allCategories) {
+    const categoriesById = {};
+    const childrenByParentId = {};
+
+    allCategories.forEach((category) => {
+      if (!category?.id) {
+        return;
+      }
+
+      categoriesById[category.id] = category;
+      const parentId = this.getParentId(category);
+      if (parentId) {
+        if (!childrenByParentId[parentId]) {
+          childrenByParentId[parentId] = [];
+        }
+        childrenByParentId[parentId].push(category);
+      }
+    });
+
+    const wrap = (cat) => {
+      const parentId = this.getParentId(cat);
+      const parent = parentId ? categoriesById[parentId] : null;
+      return {
         id: cat.id,
         name: cat.name,
         slug: cat.slug,
@@ -85,30 +132,43 @@ export default class ResourceLibrary extends Component {
         text_color: cat.text_color,
         description: cat.description,
         topic_count: cat.topic_count,
-        parent_category_id: this.getParentId(cat),
-      });
+        parent_category_id: parentId,
+        parent_slug: parent?.slug,
+      };
+    };
 
-      const tree = children.map((parent) => {
-        const subs = allCategories.filter(
-          (c) => this.getParentId(c) === parent.id
-        );
-        return {
-          ...wrap(parent),
-          subcategories: subs.map((sub) => {
-            const subSubs = allCategories.filter(
-              (c) => this.getParentId(c) === sub.id
-            );
-            return { ...wrap(sub), subcategories: subSubs.map(wrap) };
-          }),
-        };
-      });
+    const buildChildren = (parentId) => {
+      return (childrenByParentId[parentId] || []).map((category) => ({
+        ...wrap(category),
+        subcategories: buildChildren(category.id),
+      }));
+    };
+
+    return buildChildren(rootId);
+  }
+
+  async loadData() {
+    const requestId = ++this._loadRequestId;
+    this.loading = true;
+    this.topicsMap = {};
+    this.categories = [];
+
+    try {
+      const allCategories = await this.getAvailableCategories();
+      if (requestId !== this._loadRequestId) {
+        return;
+      }
+
+      const tree = this.buildCategoryTree(this.activeRootId, allCategories);
 
       this.categories = tree;
-      await this.loadAllTopics(tree);
+      await this.loadAllTopics(tree, requestId);
     } catch (e) {
       console.error("ResourceLibrary: failed to load", e);
     } finally {
-      this.loading = false;
+      if (requestId === this._loadRequestId) {
+        this.loading = false;
+      }
     }
   }
 
@@ -130,42 +190,64 @@ export default class ResourceLibrary extends Component {
     }
   }
 
-  getCategoryUrl(cat) {
-    const allCategories = this.site.categories || [];
-    const parentId = cat.parent_category_id;
-    if (parentId) {
-      const parent = allCategories.find((c) => c.id === parentId);
-      if (parent) {
-        return `/c/${parent.slug}/${cat.slug}/${cat.id}`;
-      }
+  getCategoryUrls(cat) {
+    const urls = [];
+    if (cat.parent_slug) {
+      urls.push(`/c/${cat.parent_slug}/${cat.slug}/${cat.id}`);
     }
-    return `/c/${cat.slug}/${cat.id}`;
+    urls.push(`/c/${cat.slug}/${cat.id}`);
+    return [...new Set(urls)];
   }
 
-  async loadAllTopics(tree) {
+  async fetchCategoryTopics(cat) {
+    let lastError;
+
+    for (const categoryUrl of this.getCategoryUrls(cat)) {
+      for (let attempt = 0; attempt <= TOPIC_FETCH_RETRIES; attempt++) {
+        try {
+          const res = await ajax(`${categoryUrl}/l/latest.json?per_page=30`);
+          return {
+            id: cat.id,
+            topics: (res.topic_list?.topics || []).filter(
+              (topic) => !this.isAboutTopic(topic)
+            ),
+          };
+        } catch (e) {
+          lastError = e;
+          if (attempt < TOPIC_FETCH_RETRIES) {
+            await this.delay(250 * (attempt + 1));
+          }
+        }
+      }
+    }
+
+    console.warn("ResourceLibrary: failed to load topics for category", cat.id, lastError);
+    return { id: cat.id, topics: [] };
+  }
+
+  async loadAllTopics(tree, requestId) {
     const leafCategories = this.getLeafCategories(tree).filter((c) => c.slug && c.id);
     const map = {};
+    const queue = [...leafCategories];
+    const workerCount = Math.min(TOPIC_FETCH_CONCURRENCY, queue.length);
 
-    const batches = [];
-    for (let i = 0; i < leafCategories.length; i += 5) {
-      batches.push(leafCategories.slice(i, i + 5));
-    }
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (queue.length > 0) {
+          const cat = queue.shift();
+          const result = await this.fetchCategoryTopics(cat);
+          map[result.id] = result.topics;
 
-    for (const batch of batches) {
-      const results = await Promise.allSettled(
-        batch.map((cat) =>
-          ajax(`${this.getCategoryUrl(cat)}/l/latest.json?per_page=30`)
-            .then((res) => ({ id: cat.id, topics: res.topic_list?.topics || [] }))
-        )
-      );
-      results.forEach((r) => {
-        if (r.status === "fulfilled") {
-          map[r.value.id] = r.value.topics.filter((t) => !this.isAboutTopic(t));
+          if (requestId === this._loadRequestId) {
+            this.topicsMap = { ...this.topicsMap, [result.id]: result.topics };
+          }
         }
-      });
-    }
+      })
+    );
 
-    this.topicsMap = map;
+    if (requestId === this._loadRequestId) {
+      this.topicsMap = map;
+    }
   }
 
   isAboutTopic(topic) {
