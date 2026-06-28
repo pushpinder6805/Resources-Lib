@@ -12,6 +12,12 @@ import CategoryNode from "./category-node";
 const TOPIC_FETCH_CONCURRENCY = 12;
 const TOPIC_FETCH_RETRIES = 2;
 const CATEGORY_TREE_DEPTH = 3;
+const SEARCH_DEBOUNCE_MS = 250;
+const MAX_SEARCH_TOPIC_PAGES = 1000;
+
+function normalizeSearchText(value) {
+  return String(value || "").normalize("NFKC").toLowerCase().trim();
+}
 
 export default class ResourceLibrary extends Component {
   @service composer;
@@ -25,10 +31,16 @@ export default class ResourceLibrary extends Component {
   @tracked topicsMap = {};
   @tracked _orderOverride = null;
   @tracked searchQuery = "";
+  @tracked searchTopicsMap = null;
+  @tracked searching = false;
   @tracked loading = true;
 
   _categoriesPromise = null;
   _loadRequestId = 0;
+  _searchRequestId = 0;
+  _searchTimer = null;
+  _completeSearchTopicsByRoot = new Map();
+  _completeSearchTopicsPromises = new Map();
 
   get ROOTS() {
     return [
@@ -45,6 +57,11 @@ export default class ResourceLibrary extends Component {
       this.activeRootId = category.id;
     }
     this._initLoad();
+  }
+
+  willDestroy() {
+    super.willDestroy(...arguments);
+    clearTimeout(this._searchTimer);
   }
 
   async _initLoad() {
@@ -277,6 +294,99 @@ export default class ResourceLibrary extends Component {
     return { id: cat.id, topics: [] };
   }
 
+  async requestSearchPage(url) {
+    let lastError;
+
+    for (let attempt = 0; attempt <= TOPIC_FETCH_RETRIES; attempt++) {
+      try {
+        return await this.requestJson(url);
+      } catch (error) {
+        lastError = error;
+        if (attempt < TOPIC_FETCH_RETRIES) {
+          await this.delay(250 * (attempt + 1));
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  async fetchCompleteCategoryTopics(cat) {
+    for (const topicUrl of this.getCategoryTopicUrls(cat)) {
+      const topicsById = new Map();
+
+      try {
+        for (let page = 0; page < MAX_SEARCH_TOPIC_PAGES; page++) {
+          const pageUrl = page === 0 ? topicUrl : `${topicUrl}&page=${page}`;
+          const result = await this.requestSearchPage(pageUrl);
+          const topics = result.topic_list?.topics || [];
+
+          topics.forEach((topic) => {
+            if (!this.isAboutTopic(topic)) {
+              topicsById.set(topic.id, topic);
+            }
+          });
+
+          if (!result.topic_list?.more_topics_url || topics.length === 0) {
+            return { id: cat.id, topics: Array.from(topicsById.values()) };
+          }
+        }
+
+        return { id: cat.id, topics: Array.from(topicsById.values()) };
+      } catch {
+        // Try the next supported category URL shape.
+      }
+    }
+
+    return {
+      id: cat.id,
+      topics: this.topicsMap[cat.id] || [],
+    };
+  }
+
+  async fetchCompleteSearchTopics(tree) {
+    const topicCategories = this.getTopicCategories(tree);
+    const map = {};
+    const queue = [...topicCategories];
+    const workerCount = Math.min(TOPIC_FETCH_CONCURRENCY, queue.length);
+
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (queue.length > 0) {
+          const cat = queue.shift();
+          const result = await this.fetchCompleteCategoryTopics(cat);
+          map[result.id] = result.topics;
+        }
+      })
+    );
+
+    return map;
+  }
+
+  getCompleteSearchTopics(rootId, tree) {
+    const cached = this._completeSearchTopicsByRoot.get(rootId);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+
+    let promise = this._completeSearchTopicsPromises.get(rootId);
+    if (!promise) {
+      promise = this.fetchCompleteSearchTopics(tree)
+        .then((map) => {
+          this._completeSearchTopicsByRoot.set(rootId, map);
+          this._completeSearchTopicsPromises.delete(rootId);
+          return map;
+        })
+        .catch((error) => {
+          this._completeSearchTopicsPromises.delete(rootId);
+          throw error;
+        });
+      this._completeSearchTopicsPromises.set(rootId, promise);
+    }
+
+    return promise;
+  }
+
   async loadAllTopics(tree, requestId) {
     const topicCategories = this.getTopicCategories(tree);
     const map = {};
@@ -337,14 +447,72 @@ export default class ResourceLibrary extends Component {
 
   @action
   switchRoot(root) {
+    clearTimeout(this._searchTimer);
+    this._searchRequestId++;
     this.activeRootId = root.id;
     this.searchQuery = "";
+    this.searchTopicsMap = null;
+    this.searching = false;
     this.loadData();
   }
 
   @action
   onSearchInput(e) {
     this.searchQuery = e.target.value;
+    const query = this.normalizedSearchQuery;
+    const requestId = ++this._searchRequestId;
+
+    clearTimeout(this._searchTimer);
+
+    if (!query) {
+      this.searchTopicsMap = null;
+      this.searching = false;
+      return;
+    }
+
+    const rootId = this.activeRootId;
+    const cached = this._completeSearchTopicsByRoot.get(rootId);
+    if (cached) {
+      this.searchTopicsMap = cached;
+      this.searching = false;
+      return;
+    }
+
+    this.searching = true;
+    const tree = this.categories;
+
+    this._searchTimer = setTimeout(async () => {
+      try {
+        const map = await this.getCompleteSearchTopics(rootId, tree);
+        if (
+          requestId === this._searchRequestId &&
+          rootId === this.activeRootId
+        ) {
+          this.searchTopicsMap = map;
+        }
+      } catch {
+        // Keep the existing first-page search available if a full load fails.
+        if (requestId === this._searchRequestId) {
+          this.searchTopicsMap = this.topicsMap;
+        }
+      } finally {
+        if (requestId === this._searchRequestId) {
+          this.searching = false;
+        }
+      }
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  get normalizedSearchQuery() {
+    return normalizeSearchText(this.searchQuery);
+  }
+
+  get displayTopicsMap() {
+    if (this.normalizedSearchQuery && this.searchTopicsMap) {
+      return this.searchTopicsMap;
+    }
+
+    return this.topicsMap;
   }
 
   get allowedCategoryIds() {
@@ -409,23 +577,23 @@ export default class ResourceLibrary extends Component {
   }
 
   get filteredCategories() {
-    if (!this.searchQuery.trim()) {
+    const query = this.normalizedSearchQuery;
+    if (!query) {
       return this.categories;
     }
-    const q = this.searchQuery.toLowerCase();
-    return this.filterTree(this.categories, q);
+    return this.filterTree(this.categories, query, this.displayTopicsMap);
   }
 
-  filterTree(cats, query) {
+  filterTree(cats, query, topicsMap) {
     return cats
       .map((cat) => {
         const filteredSubs = cat.subcategories
-          ? this.filterTree(cat.subcategories, query)
+          ? this.filterTree(cat.subcategories, query, topicsMap)
           : [];
 
-        const catTopics = this.topicsMap[cat.id] || [];
+        const catTopics = topicsMap[cat.id] || [];
         const matchingTopics = catTopics.filter((t) =>
-          t.title.toLowerCase().includes(query)
+          normalizeSearchText(t.title).includes(query)
         );
 
         if (filteredSubs.length > 0 || matchingTopics.length > 0) {
@@ -523,6 +691,7 @@ export default class ResourceLibrary extends Component {
               class="resource-library__search-input"
               placeholder="Search resources..."
               value={{this.searchQuery}}
+              disabled={{this.loading}}
               {{on "input" this.onSearchInput}}
             />
           </div>
@@ -551,13 +720,15 @@ export default class ResourceLibrary extends Component {
       <div class="resource-library__content">
         {{#if this.loading}}
           <div class="resource-library__loading">Loading resources...</div>
+        {{else if this.searching}}
+          <div class="resource-library__loading">Searching resources...</div>
         {{else if this.filteredCategories.length}}
           {{#each this.filteredCategories as |cat|}}
             <CategoryNode
               @category={{cat}}
-              @topicsMap={{this.topicsMap}}
+              @topicsMap={{this.displayTopicsMap}}
               @orderConfigMap={{this.orderConfigMap}}
-              @searchQuery={{this.searchQuery}}
+              @searchQuery={{this.normalizedSearchQuery}}
               @maxTopics={{this.topicsPerCategory}}
               @isStaff={{this.isStaffUser}}
               @onDeleteTopic={{this.deleteTopic}}
