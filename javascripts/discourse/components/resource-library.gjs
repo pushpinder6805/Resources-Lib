@@ -13,7 +13,7 @@ const TOPIC_FETCH_CONCURRENCY = 12;
 const TOPIC_FETCH_RETRIES = 2;
 const CATEGORY_TREE_DEPTH = 3;
 const SEARCH_DEBOUNCE_MS = 250;
-const MAX_SEARCH_TOPIC_PAGES = 1000;
+const MAX_SEARCH_PAGES = 10;
 
 function normalizeSearchText(value) {
   return String(value || "").normalize("NFKC").toLowerCase().trim();
@@ -39,8 +39,7 @@ export default class ResourceLibrary extends Component {
   _loadRequestId = 0;
   _searchRequestId = 0;
   _searchTimer = null;
-  _completeSearchTopicsByRoot = new Map();
-  _completeSearchTopicsPromises = new Map();
+  _searchController = null;
 
   get ROOTS() {
     return [
@@ -62,6 +61,7 @@ export default class ResourceLibrary extends Component {
   willDestroy() {
     super.willDestroy(...arguments);
     clearTimeout(this._searchTimer);
+    this._searchController?.abort();
   }
 
   async _initLoad() {
@@ -294,97 +294,66 @@ export default class ResourceLibrary extends Component {
     return { id: cat.id, topics: [] };
   }
 
-  async requestSearchPage(url) {
-    let lastError;
-
-    for (let attempt = 0; attempt <= TOPIC_FETCH_RETRIES; attempt++) {
-      try {
-        return await this.requestJson(url);
-      } catch (error) {
-        lastError = error;
-        if (attempt < TOPIC_FETCH_RETRIES) {
-          await this.delay(250 * (attempt + 1));
-        }
-      }
-    }
-
-    throw lastError;
-  }
-
-  async fetchCompleteCategoryTopics(cat) {
-    for (const topicUrl of this.getCategoryTopicUrls(cat)) {
-      const topicsById = new Map();
-
-      try {
-        for (let page = 0; page < MAX_SEARCH_TOPIC_PAGES; page++) {
-          const pageUrl = page === 0 ? topicUrl : `${topicUrl}&page=${page}`;
-          const result = await this.requestSearchPage(pageUrl);
-          const topics = result.topic_list?.topics || [];
-
-          topics.forEach((topic) => {
-            if (!this.isAboutTopic(topic)) {
-              topicsById.set(topic.id, topic);
-            }
-          });
-
-          if (!result.topic_list?.more_topics_url || topics.length === 0) {
-            return { id: cat.id, topics: Array.from(topicsById.values()) };
-          }
-        }
-
-        return { id: cat.id, topics: Array.from(topicsById.values()) };
-      } catch {
-        // Try the next supported category URL shape.
-      }
-    }
-
-    return {
-      id: cat.id,
-      topics: this.topicsMap[cat.id] || [],
-    };
-  }
-
-  async fetchCompleteSearchTopics(tree) {
-    const topicCategories = this.getTopicCategories(tree);
+  async searchResourceTopics(query, rootId, signal) {
     const map = {};
-    const queue = [...topicCategories];
-    const workerCount = Math.min(TOPIC_FETCH_CONCURRENCY, queue.length);
+    const seenTopicIds = new Set();
+    const searchTerm = `${query} in:title categories:${rootId}`;
 
-    await Promise.all(
-      Array.from({ length: workerCount }, async () => {
-        while (queue.length > 0) {
-          const cat = queue.shift();
-          const result = await this.fetchCompleteCategoryTopics(cat);
-          map[result.id] = result.topics;
+    for (let page = 1; page <= MAX_SEARCH_PAGES; page++) {
+      const response = await fetch(
+        `/search.json?q=${encodeURIComponent(searchTerm)}&page=${page}`,
+        {
+          credentials: "same-origin",
+          headers: { accept: "application/json" },
+          signal,
         }
-      })
-    );
+      );
+
+      if (!response.ok) {
+        throw new Error(`Resource search failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      const topics = result.topics || [];
+
+      topics.forEach((topic) => {
+        if (seenTopicIds.has(topic.id) || this.isAboutTopic(topic)) {
+          return;
+        }
+
+        seenTopicIds.add(topic.id);
+        if (!map[topic.category_id]) {
+          map[topic.category_id] = [];
+        }
+        map[topic.category_id].push(topic);
+      });
+
+      const hasMore =
+        result.grouped_search_result?.more_full_page_results ||
+        result.grouped_search_result?.more_posts ||
+        result.grouped_search_result?.more_topics;
+
+      if (!hasMore || topics.length === 0) {
+        break;
+      }
+    }
 
     return map;
   }
 
-  getCompleteSearchTopics(rootId, tree) {
-    const cached = this._completeSearchTopicsByRoot.get(rootId);
-    if (cached) {
-      return Promise.resolve(cached);
-    }
+  getLocalSearchTopics(query) {
+    const map = {};
 
-    let promise = this._completeSearchTopicsPromises.get(rootId);
-    if (!promise) {
-      promise = this.fetchCompleteSearchTopics(tree)
-        .then((map) => {
-          this._completeSearchTopicsByRoot.set(rootId, map);
-          this._completeSearchTopicsPromises.delete(rootId);
-          return map;
-        })
-        .catch((error) => {
-          this._completeSearchTopicsPromises.delete(rootId);
-          throw error;
-        });
-      this._completeSearchTopicsPromises.set(rootId, promise);
-    }
+    Object.entries(this.topicsMap).forEach(([categoryId, topics]) => {
+      const matches = topics.filter((topic) =>
+        normalizeSearchText(topic.title).includes(query)
+      );
+      if (matches.length > 0) {
+        map[categoryId] = matches;
+      }
+    });
 
-    return promise;
+    return map;
   }
 
   async loadAllTopics(tree, requestId) {
@@ -448,6 +417,7 @@ export default class ResourceLibrary extends Component {
   @action
   switchRoot(root) {
     clearTimeout(this._searchTimer);
+    this._searchController?.abort();
     this._searchRequestId++;
     this.activeRootId = root.id;
     this.searchQuery = "";
@@ -463,6 +433,7 @@ export default class ResourceLibrary extends Component {
     const requestId = ++this._searchRequestId;
 
     clearTimeout(this._searchTimer);
+    this._searchController?.abort();
 
     if (!query) {
       this.searchTopicsMap = null;
@@ -471,19 +442,17 @@ export default class ResourceLibrary extends Component {
     }
 
     const rootId = this.activeRootId;
-    const cached = this._completeSearchTopicsByRoot.get(rootId);
-    if (cached) {
-      this.searchTopicsMap = cached;
-      this.searching = false;
-      return;
-    }
-
     this.searching = true;
-    const tree = this.categories;
+    const controller = new AbortController();
+    this._searchController = controller;
 
     this._searchTimer = setTimeout(async () => {
       try {
-        const map = await this.getCompleteSearchTopics(rootId, tree);
+        const map = await this.searchResourceTopics(
+          query,
+          rootId,
+          controller.signal
+        );
         if (
           requestId === this._searchRequestId &&
           rootId === this.activeRootId
@@ -491,9 +460,12 @@ export default class ResourceLibrary extends Component {
           this.searchTopicsMap = map;
         }
       } catch {
-        // Keep the existing first-page search available if a full load fails.
-        if (requestId === this._searchRequestId) {
-          this.searchTopicsMap = this.topicsMap;
+        // Keep local search available if native Discourse search is unavailable.
+        if (
+          requestId === this._searchRequestId &&
+          !controller.signal.aborted
+        ) {
+          this.searchTopicsMap = this.getLocalSearchTopics(query);
         }
       } finally {
         if (requestId === this._searchRequestId) {
@@ -581,20 +553,17 @@ export default class ResourceLibrary extends Component {
     if (!query) {
       return this.categories;
     }
-    return this.filterTree(this.categories, query, this.displayTopicsMap);
+    return this.filterTree(this.categories, this.displayTopicsMap);
   }
 
-  filterTree(cats, query, topicsMap) {
+  filterTree(cats, topicsMap) {
     return cats
       .map((cat) => {
         const filteredSubs = cat.subcategories
-          ? this.filterTree(cat.subcategories, query, topicsMap)
+          ? this.filterTree(cat.subcategories, topicsMap)
           : [];
 
-        const catTopics = topicsMap[cat.id] || [];
-        const matchingTopics = catTopics.filter((t) =>
-          normalizeSearchText(t.title).includes(query)
-        );
+        const matchingTopics = topicsMap[cat.id] || [];
 
         if (filteredSubs.length > 0 || matchingTopics.length > 0) {
           return { ...cat, subcategories: filteredSubs, _filteredTopics: matchingTopics };

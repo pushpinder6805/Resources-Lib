@@ -47,12 +47,7 @@ export default class CategoryNode extends Component {
   }
 
   get filteredTopics() {
-    let topics = this.sortedTopics;
-    const query = this.args.searchQuery?.toLowerCase();
-    if (query) {
-      topics = topics.filter((t) => t.title.toLowerCase().includes(query));
-    }
-    return topics;
+    return this.sortedTopics;
   }
 
   get visibleTopics() {
