@@ -10,6 +10,21 @@ function positionLabel(index) {
   return `${index + 1}.`;
 }
 
+function compareNewestFirst(a, b) {
+  const createdAtA = Date.parse(a.created_at || "");
+  const createdAtB = Date.parse(b.created_at || "");
+
+  if (
+    Number.isFinite(createdAtA) &&
+    Number.isFinite(createdAtB) &&
+    createdAtA !== createdAtB
+  ) {
+    return createdAtB - createdAtA;
+  }
+
+  return Number(b.id || 0) - Number(a.id || 0);
+}
+
 export default class CategoryNode extends Component {
   @tracked showAll = false;
   @tracked reorderMode = false;
@@ -34,14 +49,30 @@ export default class CategoryNode extends Component {
   get sortedTopics() {
     const topics = this.topics;
     const ids = this.orderedTopicIds;
-    if (!ids || ids.length === 0) return topics;
-    const orderMap = {};
+    if (!ids || ids.length === 0) {
+      return [...topics].sort(compareNewestFirst);
+    }
+
+    const orderMap = new Map();
     ids.forEach((id, idx) => {
-      orderMap[id] = idx;
+      orderMap.set(Number(id), idx);
     });
+
     return [...topics].sort((a, b) => {
-      const posA = orderMap[a.id] !== undefined ? orderMap[a.id] : 9999;
-      const posB = orderMap[b.id] !== undefined ? orderMap[b.id] : 9999;
+      const posA = orderMap.get(Number(a.id));
+      const posB = orderMap.get(Number(b.id));
+      const isOrderedA = posA !== undefined;
+      const isOrderedB = posB !== undefined;
+
+      if (!isOrderedA && !isOrderedB) {
+        return compareNewestFirst(a, b);
+      }
+      if (!isOrderedA) {
+        return -1;
+      }
+      if (!isOrderedB) {
+        return 1;
+      }
       return posA - posB;
     });
   }
