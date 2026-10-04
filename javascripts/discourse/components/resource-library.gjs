@@ -6,11 +6,12 @@ import { on } from "@ember/modifier";
 import { service } from "@ember/service";
 import { eq } from "truth-helpers";
 import { ajax } from "discourse/lib/ajax";
+import getURL from "discourse/lib/get-url";
+import { requestJson, flattenCategories, fetchCategoryTopics } from "../lib/resource-data";
 import Composer from "discourse/models/composer";
 import CategoryNode from "./category-node";
 
-const TOPIC_FETCH_CONCURRENCY = 12;
-const TOPIC_FETCH_RETRIES = 2;
+const TOPIC_FETCH_CONCURRENCY = 3;
 const CATEGORY_TREE_DEPTH = 3;
 const SEARCH_DEBOUNCE_MS = 250;
 const MAX_SEARCH_PAGES = 10;
@@ -35,7 +36,8 @@ export default class ResourceLibrary extends Component {
   @tracked searching = false;
   @tracked loading = true;
 
-  _categoriesPromise = null;
+  @tracked loadError = false;
+  _loadController = null;
   _loadRequestId = 0;
   _searchRequestId = 0;
   _searchTimer = null;
@@ -55,20 +57,16 @@ export default class ResourceLibrary extends Component {
     if (category && this.ROOTS.some((root) => root.id === category.id)) {
       this.activeRootId = category.id;
     }
-    this._initLoad();
+    this.loadData();
   }
 
   willDestroy() {
     super.willDestroy(...arguments);
     clearTimeout(this._searchTimer);
     this._searchController?.abort();
-  }
-
-  async _initLoad() {
-    await this.loadData();
-    if (this.categories.length === 0) {
-      setTimeout(() => this.loadData(), 1000);
-    }
+    this._loadController?.abort();
+    this._loadRequestId++;
+    this._searchRequestId++;
   }
 
   get dynamicTitle() {
@@ -90,57 +88,23 @@ export default class ResourceLibrary extends Component {
     return category.parent_category_id ?? category.parentCategory?.id ?? null;
   }
 
-  delay(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  requestJson(url, signal) {
+    return requestJson(getURL(url), signal);
   }
 
-  async requestJson(url) {
-    const response = await fetch(url, {
-      credentials: "same-origin",
-      headers: {
-        accept: "application/json",
-      },
+  async getAvailableCategories(signal) {
+    const result = await this.requestJson("/categories.json?include_subcategories=true", signal);
+    if (!Array.isArray(result.category_list?.categories)) {
+      throw new Error("Invalid category response");
+    }
+    // Include the nested API response instead of depending on bootstrap timing.
+    const categories = new Map(
+      flattenCategories(result.category_list.categories).map((cat) => [cat.id, cat])
+    );
+    (this.site.categories || []).forEach((cat) => {
+      if (!categories.has(cat.id)) categories.set(cat.id, cat);
     });
-
-    if (!response.ok) {
-      throw new Error(`Failed request: ${response.status}`);
-    }
-
-    return response.json();
-  }
-
-  async fetchAllCategories() {
-    if (!this._categoriesPromise) {
-      this._categoriesPromise = ajax("/categories.json")
-        .then((result) => result?.category_list?.categories || [])
-        .catch(() => {
-          this._categoriesPromise = null;
-          return [];
-        });
-    }
-    return this._categoriesPromise;
-  }
-
-  async getAvailableCategories() {
-    const siteCategories = this.site.categories || [];
-    const fetchedCategories = await this.fetchAllCategories();
-    const orderedCategories = [];
-    const seenCategoryIds = new Set();
-
-    const addCategory = (category) => {
-      if (!category?.id || seenCategoryIds.has(category.id)) {
-        return;
-      }
-      seenCategoryIds.add(category.id);
-      orderedCategories.push(category);
-    };
-
-    const primaryCategories = fetchedCategories.length > 0 ? fetchedCategories : siteCategories;
-    const fallbackCategories = fetchedCategories.length > 0 ? siteCategories : fetchedCategories;
-    primaryCategories.forEach(addCategory);
-    fallbackCategories.forEach(addCategory);
-
-    return orderedCategories;
+    return [...categories.values()];
   }
 
   getCategoryPosition(category) {
@@ -199,6 +163,7 @@ export default class ResourceLibrary extends Component {
         text_color: cat.text_color,
         description: cat.description,
         topic_count: cat.topic_count,
+        topic_url: cat.topic_url,
         parent_category_id: parentId,
         parent_slug: parent?.slug,
       };
@@ -218,13 +183,17 @@ export default class ResourceLibrary extends Component {
   }
 
   async loadData() {
+    this._loadController?.abort();
+    const controller = new AbortController();
+    this._loadController = controller;
     const requestId = ++this._loadRequestId;
+    this.loadError = false;
     this.loading = true;
     this.topicsMap = {};
     this.categories = [];
 
     try {
-      const allCategories = await this.getAvailableCategories();
+      const allCategories = await this.getAvailableCategories(controller.signal);
       if (requestId !== this._loadRequestId) {
         return;
       }
@@ -232,9 +201,12 @@ export default class ResourceLibrary extends Component {
       const tree = this.buildCategoryTree(this.activeRootId, allCategories);
 
       this.categories = tree;
-      await this.loadAllTopics(tree, requestId);
+      await this.loadAllTopics(tree, requestId, controller.signal);
     } catch (e) {
-      console.error("ResourceLibrary: failed to load", e);
+      if (requestId === this._loadRequestId && !controller.signal.aborted) {
+        this.loadError = true;
+        console.error("ResourceLibrary: failed to load", e);
+      }
     } finally {
       if (requestId === this._loadRequestId) {
         this.loading = false;
@@ -260,38 +232,9 @@ export default class ResourceLibrary extends Component {
     }
   }
 
-  getCategoryTopicUrls(cat) {
-    const baseUrls = [`/c/${cat.slug}/${cat.id}`];
-    if (cat.parent_slug) {
-      baseUrls.push(`/c/${cat.parent_slug}/${cat.slug}/${cat.id}`);
-    }
-
-    return [...new Set(baseUrls)].flatMap((categoryUrl) => [
-      `${categoryUrl}.json?per_page=30`,
-      `${categoryUrl}/l/latest.json?per_page=30`,
-    ]);
-  }
-
-  async fetchCategoryTopics(cat) {
-    for (const topicUrl of this.getCategoryTopicUrls(cat)) {
-      for (let attempt = 0; attempt <= TOPIC_FETCH_RETRIES; attempt++) {
-        try {
-          const res = await this.requestJson(topicUrl);
-          return {
-            id: cat.id,
-            topics: (res.topic_list?.topics || []).filter(
-              (topic) => !this.isAboutTopic(topic)
-            ),
-          };
-        } catch (e) {
-          if (attempt < TOPIC_FETCH_RETRIES) {
-            await this.delay(250 * (attempt + 1));
-          }
-        }
-      }
-    }
-
-    return { id: cat.id, topics: [] };
+  @action
+  retryLoad() {
+    this.loadData();
   }
 
   async searchResourceTopics(query, rootId, signal) {
@@ -301,7 +244,7 @@ export default class ResourceLibrary extends Component {
 
     for (let page = 1; page <= MAX_SEARCH_PAGES; page++) {
       const response = await fetch(
-        `/search.json?q=${encodeURIComponent(searchTerm)}&page=${page}`,
+        getURL(`/search.json?q=${encodeURIComponent(searchTerm)}&page=${page}`),
         {
           credentials: "same-origin",
           headers: { accept: "application/json" },
@@ -356,7 +299,7 @@ export default class ResourceLibrary extends Component {
     return map;
   }
 
-  async loadAllTopics(tree, requestId) {
+  async loadAllTopics(tree, requestId, signal) {
     const topicCategories = this.getTopicCategories(tree);
     const map = {};
     const queue = [...topicCategories];
@@ -364,12 +307,11 @@ export default class ResourceLibrary extends Component {
 
     await Promise.all(
       Array.from({ length: workerCount }, async () => {
-        while (queue.length > 0) {
+        while (queue.length > 0 && !signal.aborted) {
           const cat = queue.shift();
-          const result = await this.fetchCategoryTopics(cat).catch(() => ({
-            id: cat.id,
-            topics: [],
-          }));
+          const result = await fetchCategoryTopics(cat, (url, requestSignal) => this.requestJson(url, requestSignal), signal);
+          if (requestId !== this._loadRequestId || signal.aborted) return;
+          if (result.error) this.loadError = true;
           map[result.id] = result.topics;
 
           if (requestId === this._loadRequestId) {
@@ -397,7 +339,6 @@ export default class ResourceLibrary extends Component {
         if (
           node?.id &&
           node?.slug &&
-          Number(node.topic_count) > 0 &&
           !seen.has(node.id)
         ) {
           seen.add(node.id);
@@ -687,9 +628,16 @@ export default class ResourceLibrary extends Component {
       </div>
 
       <div class="resource-library__content">
+        {{#if this.loadError}}
+          <div class="resource-library__error" role="alert">
+            Some resources could not be loaded. Please try again.
+            <button type="button" class="btn btn-default" disabled={{this.loading}} {{on "click" this.retryLoad}}>Retry</button>
+          </div>
+        {{/if}}
         {{#if this.loading}}
-          <div class="resource-library__loading">Loading resources...</div>
-        {{else if this.searching}}
+          <div class="resource-library__loading" role="status">Loading resources...</div>
+        {{/if}}
+        {{#if this.searching}}
           <div class="resource-library__loading">Searching resources...</div>
         {{else if this.filteredCategories.length}}
           {{#each this.filteredCategories as |cat|}}
@@ -706,7 +654,11 @@ export default class ResourceLibrary extends Component {
             />
           {{/each}}
         {{else}}
-          <div class="resource-library__empty">No resources found.</div>
+          {{#unless this.loading}}
+            {{#unless this.loadError}}
+              <div class="resource-library__empty">No resources found.</div>
+            {{/unless}}
+          {{/unless}}
         {{/if}}
       </div>
     </div>

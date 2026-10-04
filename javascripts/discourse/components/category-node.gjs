@@ -4,6 +4,7 @@ import { action } from "@ember/object";
 import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { ajax } from "discourse/lib/ajax";
+import { sortResourceTopics } from "../lib/resource-data";
 import { eq } from "truth-helpers";
 
 function positionLabel(index) {
@@ -32,18 +33,7 @@ export default class CategoryNode extends Component {
   }
 
   get sortedTopics() {
-    const topics = this.topics;
-    const ids = this.orderedTopicIds;
-    if (!ids || ids.length === 0) return topics;
-    const orderMap = {};
-    ids.forEach((id, idx) => {
-      orderMap[id] = idx;
-    });
-    return [...topics].sort((a, b) => {
-      const posA = orderMap[a.id] !== undefined ? orderMap[a.id] : 9999;
-      const posB = orderMap[b.id] !== undefined ? orderMap[b.id] : 9999;
-      return posA - posB;
-    });
+    return sortResourceTopics(this.topics, this.orderedTopicIds);
   }
 
   get filteredTopics() {

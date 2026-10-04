@@ -16,21 +16,6 @@
 }
 
 
-// When browsing resource categories, hide the default topic list
-body.category-resource-library,
-body.category-california-resource-library,
-body[class*="category-all-states-resource"] {
-  .topic-list,
-  .latest-topic-list-container,
-  #list-area .topic-list {
-    display: none !important;
-  }
-
-  .custom-category-header {
-    display: none !important;
-  }
-}
-
 body:has(.resource-library) {
   .topic-list,
   .latest-topic-list-container,
@@ -751,4 +736,11 @@ body:has(.resource-topic-view) {
   .category-node__children {
     padding-left: 0.5rem;
   }
+}
+
+.resource-library__error {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--danger);
+  border-radius: 6px;
 }
