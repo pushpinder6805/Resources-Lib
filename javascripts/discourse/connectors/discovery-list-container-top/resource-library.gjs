@@ -1,3 +1,4 @@
+import { array } from "@ember/helper";
 import Component from "@glimmer/component";
 import ResourceLibrary from "../../components/resource-library";
 
@@ -18,7 +19,9 @@ export default class ResourceLibraryConnector extends Component {
 
   <template>
     {{#if this.shouldShow}}
-      <ResourceLibrary @category={{this.currentCategory}} />
+      {{#each (array this.currentCategory) key="id" as |category|}}
+        <ResourceLibrary @category={{category}} />
+      {{/each}}
     {{/if}}
   </template>
 }
